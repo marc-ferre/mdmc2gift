@@ -33,11 +33,11 @@ def main() -> int:
 
         content = output_file.read_text(encoding="utf-8")
         assert "::Q1::" in content
-        assert "=Paris" in content
-        assert "~Lyon" in content
-        assert "~Aucune de ces réponses n'est correcte." in content
+        assert "~%100%Paris" in content
+        assert "~%-25%Lyon" in content
+        assert "~%-25%Aucune de ces réponses n'est correcte." in content
         assert "::Q2::" in content
-        assert "=4" in content
+        assert "~%100%4" in content
 
         assert completed.returncode == 0
 
@@ -67,8 +67,8 @@ def main() -> int:
 
         five_content = sample_five.with_suffix(".gift").read_text(encoding="utf-8")
         assert "~Aucune de ces réponses n'est correcte." not in five_content
-        assert five_content.count("\n=") == 1
-        assert five_content.count("\n~") == 4
+        assert "~%100%Réponse 1" in five_content
+        assert five_content.count("\n~%-25%") == 4
 
         sample_format = temp_path / "sample_format.mdmc"
         sample_format.write_text(
@@ -95,8 +95,8 @@ def main() -> int:
 
         format_content = sample_format.with_suffix(".gift").read_text(encoding="utf-8")
         assert "::Q4:: Énoncé <strong>important</strong> en <em>italique</em>. {" in format_content
-        assert "=Réponse <strong>correcte</strong>" in format_content
-        assert "~Réponse <em>incorrecte</em>" in format_content
+        assert "~%100%Réponse <strong>correcte</strong>" in format_content
+        assert "~%-25%Réponse <em>incorrecte</em>" in format_content
 
         sample_list = temp_path / "sample_list.mdmc"
         sample_list.write_text(
@@ -132,8 +132,37 @@ def main() -> int:
         assert "<li>élément 1</li>" in list_content
         assert "<li>élément 2</li>" in list_content
         assert "<p>Conclusion.</p>" in list_content
-        assert "=Bonne réponse" in list_content
-        assert "~Mauvaise réponse 3" in list_content
+        assert "~%100%Bonne réponse" in list_content
+        assert "~%-25%Mauvaise réponse 3" in list_content
+
+        sample_multi = temp_path / "sample_multi.mdmc"
+        sample_multi.write_text(
+            textwrap.dedent(
+                """\
+                ## [Q6]
+                ### Quelles réponses sont justes ?
+                + Bonne réponse 1
+                + Bonne réponse 2
+                - Mauvaise réponse 1
+                - Mauvaise réponse 2
+                - Mauvaise réponse 3
+                """
+            ),
+            encoding="utf-8",
+        )
+
+        subprocess.run(
+            [sys.executable, str(script), str(sample_multi)],
+            cwd=temp_path,
+            capture_output=True,
+            text=True,
+            check=True,
+        )
+
+        multi_content = sample_multi.with_suffix(".gift").read_text(encoding="utf-8")
+        assert "~%50%Bonne réponse 1" in multi_content
+        assert "~%50%Bonne réponse 2" in multi_content
+        assert multi_content.count("\n~%-33.33333%") == 3
 
     return 0
 
