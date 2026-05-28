@@ -148,6 +148,25 @@ def escape_gift(text: str) -> str:
     return text
 
 
+def format_percentage(value: float) -> str:
+    formatted = f"{value:.5f}".rstrip("0").rstrip(".")
+    return formatted or "0"
+
+
+def answer_prefixes(answers: list[dict[str, object]]) -> list[str]:
+    correct_count = sum(1 for answer in answers if answer["correct"])
+    incorrect_count = len(answers) - correct_count
+
+    prefixes: list[str] = []
+    for answer in answers:
+        if answer["correct"]:
+            weight = 100.0 / correct_count if correct_count else 0.0
+        else:
+            weight = -(100.0 / incorrect_count) if incorrect_count else 0.0
+        prefixes.append(f"~%{format_percentage(weight)}%")
+    return prefixes
+
+
 def render_block(lines: list[str]) -> str:
     if not lines:
         return ""
@@ -182,15 +201,16 @@ def finalize_question(current: dict[str, object] | None) -> str | None:
     if not answers:
         return None
 
+    prefixes = answer_prefixes(answers)
+
     lines = []
     if title:
         lines.append(f"::{title}:: {question_text} {{")
     else:
         lines.append(f"{question_text} {{")
 
-    for answer in answers:
+    for prefix, answer in zip(prefixes, answers):
         answer_text = escape_gift(render_block(answer["lines"]))
-        prefix = "=" if answer["correct"] else "~"
         lines.append(f"{prefix}{answer_text}")
 
     lines.append("}")
