@@ -1,0 +1,251 @@
+#!/usr/bin/env python3
+"""Convert mdmc questions to Moodle GIFT."""
+
+from __future__ import annotations
+
+import argparse
+import re
+import subprocess
+import sys
+from pathlib import Path
+
+
+QUESTION_START_MD = re.compile(r"^##\s*\[(.+?)\]\s*$")
+QUESTION_START_TEX = re.compile(r"^\\begin\{questionmult\}\{(.+?)\}\s*$")
+QUESTION_END_TEX = re.compile(r"^\\end\{questionmult\}\s*$")
+RESPONSES_START_TEX = re.compile(r"^\\begin\{reponses\}\s*$")
+RESPONSES_END_TEX = re.compile(r"^\\end\{reponses\}\s*$")
+QUESTION_TEXT_MD = re.compile(r"^###\s*(.*)$")
+ANSWER_MD = re.compile(r"^([+-])\s+(.*)$")
+ANSWER_TEX = re.compile(r"^\\(bonne|mauvaise)\{(.+)\}\s*$")
+
+UNICODE_SPACES = {
+    "\u00A0": " ",
+    "\u2009": " ",
+    "\u202F": " ",
+}
+
+
+def normalize_spaces(text: str) -> str:
+    for source, replacement in UNICODE_SPACES.items():
+        text = text.replace(source, replacement)
+    return text
+
+
+def pandoc_plain(fragment: str) -> str:
+    fragment = normalize_spaces(fragment).strip()
+    if not fragment:
+        return ""
+
+    try:
+        completed = subprocess.run(
+            ["pandoc", "-f", "markdown+raw_tex", "-t", "plain", "--wrap=none"],
+            input=fragment,
+            text=True,
+            capture_output=True,
+            check=True,
+        )
+    except (FileNotFoundError, subprocess.CalledProcessError):
+        return fragment
+
+    return normalize_spaces(completed.stdout).strip()
+
+
+def escape_gift(text: str) -> str:
+    text = normalize_spaces(text)
+    text = re.sub(r"\s+", " ", text).strip()
+    text = text.replace("\\", "\\\\")
+    for char in ("=", "~", "#", "{", "}", ":"):
+        text = text.replace(char, f"\\{char}")
+    return text
+
+
+def render_block(lines: list[str]) -> str:
+    if not lines:
+        return ""
+    fragment = "\n".join(lines)
+    return pandoc_plain(fragment)
+
+
+def finalize_question(current: dict[str, object] | None) -> str | None:
+    if current is None:
+        return None
+
+    title = escape_gift(str(current["title"])) if current["title"] else ""
+    question_text = escape_gift(render_block(current["question_lines"]))
+
+    answers = current["answers"]
+    if current["current_answer"] is not None:
+        answers.append(current["current_answer"])
+        current["current_answer"] = None
+
+    if not answers:
+        return None
+
+    lines = []
+    if title:
+        lines.append(f"::{title}:: {question_text} {{")
+    else:
+        lines.append(f"{question_text} {{")
+
+    for answer in answers:
+        answer_text = escape_gift(render_block(answer["lines"]))
+        prefix = "=" if answer["correct"] else "~"
+        lines.append(f"{prefix}{answer_text}")
+
+    lines.append("}")
+    return "\n".join(lines)
+
+
+def convert_lines(lines: list[str]) -> str:
+    output: list[str] = []
+    current: dict[str, object] | None = None
+    mode = None
+    section = None
+
+    def start_question(title: str, new_mode: str) -> None:
+        nonlocal current, mode, section
+        flushed = finalize_question(current)
+        if flushed:
+            output.append(flushed)
+            output.append("")
+        current = {
+            "title": title,
+            "question_lines": [],
+            "answers": [],
+            "current_answer": None,
+        }
+        mode = new_mode
+        section = "question"
+
+    for raw_line in lines:
+        line = raw_line.rstrip("\n")
+        stripped = line.strip()
+
+        if match := QUESTION_START_MD.match(stripped):
+            start_question(match.group(1), "markdown")
+            continue
+
+        if match := QUESTION_START_TEX.match(stripped):
+            start_question(match.group(1), "latex")
+            continue
+
+        if current is None:
+            continue
+
+        if RESPONSES_START_TEX.match(stripped):
+            section = "answers"
+            continue
+
+        if RESPONSES_END_TEX.match(stripped):
+            section = "question"
+            continue
+
+        if QUESTION_END_TEX.match(stripped):
+            flushed = finalize_question(current)
+            if flushed:
+                output.append(flushed)
+                output.append("")
+            current = None
+            mode = None
+            section = None
+            continue
+
+        if not stripped:
+            if mode == "markdown" and section == "answers":
+                flushed = finalize_question(current)
+                if flushed:
+                    output.append(flushed)
+                    output.append("")
+                current = None
+                mode = None
+                section = None
+            elif section == "question":
+                current["question_lines"].append("")
+            continue
+
+        if answer_match := ANSWER_MD.match(stripped):
+            section = "answers"
+            current["answers"].append(
+                {
+                    "correct": answer_match.group(1) == "+",
+                    "lines": [answer_match.group(2)],
+                }
+            )
+            continue
+
+        if answer_match := ANSWER_TEX.match(stripped):
+            section = "answers"
+            current["answers"].append(
+                {
+                    "correct": answer_match.group(1) == "bonne",
+                    "lines": [answer_match.group(2)],
+                }
+            )
+            continue
+
+        if section == "answers":
+            if current["answers"]:
+                current["answers"][-1]["lines"].append(stripped)
+            continue
+
+        if section == "question":
+            if question_match := QUESTION_TEXT_MD.match(stripped):
+                current["question_lines"].append(question_match.group(1))
+            else:
+                current["question_lines"].append(stripped)
+            continue
+
+    flushed = finalize_question(current)
+    if flushed:
+        output.append(flushed)
+
+    return "\n".join(line for line in output if line is not None).strip() + "\n"
+
+
+def read_input(path: Path | None) -> list[str]:
+    if path is None:
+        return sys.stdin.read().splitlines(True)
+    return path.read_text(encoding="utf-8").splitlines(True)
+
+
+def write_output(path: Path | None, content: str) -> None:
+    if path is None:
+        sys.stdout.write(content)
+        return
+    path.write_text(content, encoding="utf-8")
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser(
+        prog="mdmc2gift",
+        description="Convertit des fichiers .mdmc en format GIFT pour Moodle.",
+    )
+    parser.add_argument(
+        "input",
+        nargs="?",
+        help="Fichier .mdmc à convertir. Si absent, lit sur l'entrée standard.",
+    )
+    args = parser.parse_args()
+
+    input_path = Path(args.input) if args.input and args.input != "-" else None
+    if input_path is not None and not input_path.is_file():
+        print(f"Erreur: fichier introuvable: {input_path}", file=sys.stderr)
+        return 1
+
+    lines = read_input(input_path)
+    content = convert_lines(lines)
+
+    output_path = None
+    if input_path is not None:
+        output_path = input_path.with_suffix(".gift")
+
+    write_output(output_path, content)
+    if output_path is not None:
+        print(f"Écrit: {output_path}", file=sys.stderr)
+
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
