@@ -16,6 +16,8 @@ Le script principal s'appelle `mdmc2gift` et produit un fichier `.gift` directem
 - Compatibilité avec l’ancien format AMC `questionmult` / `reponses`.
 - Si une question contient 4 propositions, ajout automatique de `Aucune de ces réponses n'est correcte.`.
 - Si une question contient déjà 5 propositions, aucune réponse supplémentaire n’est ajoutée.
+- Conservation du format Markdown inline (gras, italique) dans le fichier GIFT.
+- Ajout automatique d'une ponctuation finale sur la question si elle est absente.
 - Échappement des caractères spéciaux GIFT les plus sensibles.
 - Normalisation via Pandoc quand il est disponible.
 
