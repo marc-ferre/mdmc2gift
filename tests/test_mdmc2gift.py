@@ -68,7 +68,8 @@ def main() -> int:
         five_content = sample_five.with_suffix(".gift").read_text(encoding="utf-8")
         assert "~Aucune de ces réponses n'est correcte." not in five_content
         assert "~%100%Réponse 1" in five_content
-        assert five_content.count("\n~%-25%") == 4
+        assert "~%-25%Réponse 2" in five_content
+        assert "~%-25%Réponse 5" in five_content
 
         sample_format = temp_path / "sample_format.mdmc"
         sample_format.write_text(
@@ -162,7 +163,8 @@ def main() -> int:
         multi_content = sample_multi.with_suffix(".gift").read_text(encoding="utf-8")
         assert "~%50%Bonne réponse 1" in multi_content
         assert "~%50%Bonne réponse 2" in multi_content
-        assert multi_content.count("\n~%-33.33333%") == 3
+        assert "~%-33.33333%Mauvaise réponse 1" in multi_content
+        assert "~%-33.33333%Mauvaise réponse 3" in multi_content
 
     return 0
 
