@@ -6,6 +6,7 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import textwrap
 from pathlib import Path
 
 
@@ -34,10 +35,40 @@ def main() -> int:
         assert "::Q1::" in content
         assert "=Paris" in content
         assert "~Lyon" in content
+        assert "~Aucune de ces réponses n'est correcte." in content
         assert "::Q2::" in content
         assert "=4" in content
 
         assert completed.returncode == 0
+
+        sample_five = temp_path / "sample_five.mdmc"
+        sample_five.write_text(
+            textwrap.dedent(
+                """\
+                ## [Q3]
+                ### Quelle proposition est correcte ?
+                + Réponse 1
+                - Réponse 2
+                - Réponse 3
+                - Réponse 4
+                - Réponse 5
+                """
+            ),
+            encoding="utf-8",
+        )
+
+        subprocess.run(
+            [sys.executable, str(script), str(sample_five)],
+            cwd=temp_path,
+            capture_output=True,
+            text=True,
+            check=True,
+        )
+
+        five_content = sample_five.with_suffix(".gift").read_text(encoding="utf-8")
+        assert "~Aucune de ces réponses n'est correcte." not in five_content
+        assert five_content.count("\n=") == 1
+        assert five_content.count("\n~") == 4
 
     return 0
 
