@@ -16,6 +16,7 @@ Le script principal s'appelle `mdmc2gift` et produit un fichier `.gift` directem
 - Compatibilité avec l’ancien format AMC `questionmult` / `reponses`.
 - Si une question contient 4 propositions, ajout automatique de `Aucune de ces réponses n'est correcte.`.
 - Si une question contient déjà 5 propositions, aucune réponse supplémentaire n’est ajoutée.
+- Scoring GIFT pondéré par case cochée : bonus réparti également entre les bonnes réponses, malus réparti également entre les mauvaises.
 - Conservation du format Markdown inline (gras, italique) dans le fichier GIFT.
 - Ajout automatique d'une ponctuation finale sur la question si elle est absente.
 - Échappement des caractères spéciaux GIFT les plus sensibles.
@@ -87,13 +88,15 @@ Chaque question est écrite au format GIFT avec une syntaxe du type :
 
 ```gift
 ::Q1:: Quelle est la capitale de la France ? {
-=Paris
-~Lyon
-~Marseille
-~Toulouse
-~Aucune de ces réponses n'est correcte.
+~%100%Paris
+~%-25%Lyon
+~%-25%Marseille
+~%-25%Toulouse
+~%-25%Aucune de ces réponses n'est correcte.
 }
 ```
+
+Avec plusieurs bonnes réponses, les points sont partagés également entre elles et les mauvaises réponses portent un malus égal. Moodle borne ensuite naturellement la note minimale de la question à 0.
 
 Le fichier de sortie est créé avec la même base de nom que le fichier d’entrée et l’extension `.gift`.
 
