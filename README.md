@@ -14,6 +14,8 @@ Le script principal s'appelle `mdmc2gift` et produit un fichier `.gift` directem
 - Conversion `.mdmc` vers GIFT avec questions à choix multiples.
 - Compatibilité avec le format Markdown simple utilisé par l’écosystème `mdmc2*`.
 - Compatibilité avec l’ancien format AMC `questionmult` / `reponses`.
+- Si une question contient 4 propositions, ajout automatique de `Aucune de ces réponses n'est correcte.`.
+- Si une question contient déjà 5 propositions, aucune réponse supplémentaire n’est ajoutée.
 - Échappement des caractères spéciaux GIFT les plus sensibles.
 - Normalisation via Pandoc quand il est disponible.
 
@@ -87,6 +89,7 @@ Chaque question est écrite au format GIFT avec une syntaxe du type :
 ~Lyon
 ~Marseille
 ~Toulouse
+~Aucune de ces réponses n'est correcte.
 }
 ```
 
