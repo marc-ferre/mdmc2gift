@@ -70,6 +70,71 @@ def main() -> int:
         assert five_content.count("\n=") == 1
         assert five_content.count("\n~") == 4
 
+        sample_format = temp_path / "sample_format.mdmc"
+        sample_format.write_text(
+            textwrap.dedent(
+                """\
+                ## [Q4]
+                ### Énoncé **important** en *italique*
+                + Réponse **correcte**
+                - Réponse *incorrecte*
+                - Réponse neutre
+                - Réponse finale
+                """
+            ),
+            encoding="utf-8",
+        )
+
+        subprocess.run(
+            [sys.executable, str(script), str(sample_format)],
+            cwd=temp_path,
+            capture_output=True,
+            text=True,
+            check=True,
+        )
+
+        format_content = sample_format.with_suffix(".gift").read_text(encoding="utf-8")
+        assert "::Q4:: Énoncé <strong>important</strong> en <em>italique</em>. {" in format_content
+        assert "=Réponse <strong>correcte</strong>" in format_content
+        assert "~Réponse <em>incorrecte</em>" in format_content
+
+        sample_list = temp_path / "sample_list.mdmc"
+        sample_list.write_text(
+            textwrap.dedent(
+                """\
+                ## [Q5]
+                ### Voici une question
+                Première ligne
+
+                - élément 1
+                - élément 2
+
+                Conclusion
+                + Bonne réponse
+                - Mauvaise réponse 1
+                - Mauvaise réponse 2
+                - Mauvaise réponse 3
+                """
+            ),
+            encoding="utf-8",
+        )
+
+        subprocess.run(
+            [sys.executable, str(script), str(sample_list)],
+            cwd=temp_path,
+            capture_output=True,
+            text=True,
+            check=True,
+        )
+
+        list_content = sample_list.with_suffix(".gift").read_text(encoding="utf-8")
+        assert "<ul>" in list_content
+        assert "<li>élément 1</li>" in list_content
+        assert "<li>élément 2</li>" in list_content
+        assert "<p>Conclusion.</p>" in list_content
+        assert "=Bonne réponse" in list_content
+        assert "~Mauvaise réponse 3" in list_content
+
     return 0
 
 
