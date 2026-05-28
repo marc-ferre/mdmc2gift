@@ -41,14 +41,14 @@ def normalize_spaces(text: str) -> str:
     return text
 
 
-def pandoc_plain(fragment: str) -> str:
+def pandoc_html(fragment: str) -> str:
     fragment = normalize_spaces(fragment).strip()
     if not fragment:
         return ""
 
     try:
         completed = subprocess.run(
-            ["pandoc", "-f", "markdown+raw_tex", "-t", "plain", "--wrap=none"],
+            ["pandoc", "-f", "markdown+raw_tex", "-t", "html", "--wrap=none"],
             input=fragment,
             text=True,
             capture_output=True,
@@ -58,6 +58,85 @@ def pandoc_plain(fragment: str) -> str:
         return fragment
 
     return normalize_spaces(completed.stdout).strip()
+
+
+def ensure_terminal_punctuation_in_lines(lines: list[str]) -> list[str]:
+    updated = list(lines)
+    for idx in range(len(updated) - 1, -1, -1):
+        value = updated[idx].strip()
+        if not value:
+            continue
+        if value[-1] not in ".?!:;":
+            updated[idx] = updated[idx].rstrip() + "."
+        break
+    return updated
+
+
+def unwrap_single_paragraph_html(html: str) -> str:
+    stripped = html.strip()
+    if stripped.startswith("<p>") and stripped.endswith("</p>") and stripped.count("<p>") == 1:
+        return stripped[3:-4].strip()
+    return stripped
+
+
+def normalize_markdown_question_lines(lines: list[str]) -> list[str]:
+    normalized: list[str] = []
+    for line in lines:
+        stripped = line.strip()
+        if question_match := QUESTION_TEXT_MD.match(stripped):
+            normalized.append(question_match.group(1))
+        else:
+            normalized.append(line)
+    return normalized
+
+
+def parse_markdown_answers(lines: list[str]) -> list[dict[str, object]] | None:
+    answers: list[dict[str, object]] = []
+    current_answer: dict[str, object] | None = None
+    after_blank = False
+
+    for raw_line in lines:
+        stripped = raw_line.strip()
+        if not stripped:
+            if current_answer is not None:
+                after_blank = True
+            continue
+
+        if answer_match := ANSWER_MD.match(stripped):
+            current_answer = {
+                "correct": answer_match.group(1) == "+",
+                "lines": [answer_match.group(2)],
+            }
+            answers.append(current_answer)
+            after_blank = False
+            continue
+
+        if current_answer is None or after_blank:
+            return None
+
+        current_answer["lines"].append(raw_line)
+
+    if len(answers) in (4, 5):
+        return answers
+    return None
+
+
+def split_markdown_question(raw_lines: list[str]) -> tuple[list[str], list[dict[str, object]]]:
+    trimmed = list(raw_lines)
+    while trimmed and not trimmed[-1].strip():
+        trimmed.pop()
+
+    candidate_indexes = [
+        index for index, line in enumerate(trimmed) if ANSWER_MD.match(line.strip())
+    ]
+
+    for index in candidate_indexes:
+        answers = parse_markdown_answers(trimmed[index:])
+        if answers is not None:
+            question_lines = normalize_markdown_question_lines(trimmed[:index])
+            return question_lines, answers
+
+    return normalize_markdown_question_lines(trimmed), []
 
 
 def escape_gift(text: str) -> str:
@@ -73,7 +152,7 @@ def render_block(lines: list[str]) -> str:
     if not lines:
         return ""
     fragment = "\n".join(lines)
-    return pandoc_plain(fragment)
+    return unwrap_single_paragraph_html(pandoc_html(fragment))
 
 
 def finalize_question(current: dict[str, object] | None) -> str | None:
@@ -81,7 +160,11 @@ def finalize_question(current: dict[str, object] | None) -> str | None:
         return None
 
     title = escape_gift(str(current["title"])) if current["title"] else ""
-    question_text = escape_gift(render_block(current["question_lines"]))
+    if current["mode"] == "markdown":
+        current["question_lines"], current["answers"] = split_markdown_question(current["raw_lines"])
+
+    question_lines = ensure_terminal_punctuation_in_lines(current["question_lines"])
+    question_text = escape_gift(render_block(question_lines))
 
     answers = current["answers"]
     if current["current_answer"] is not None:
@@ -128,6 +211,8 @@ def convert_lines(lines: list[str]) -> str:
             output.append("")
         current = {
             "title": title,
+            "mode": new_mode,
+            "raw_lines": [],
             "question_lines": [],
             "answers": [],
             "current_answer": None,
@@ -148,6 +233,10 @@ def convert_lines(lines: list[str]) -> str:
             continue
 
         if current is None:
+            continue
+
+        if current["mode"] == "markdown":
+            current["raw_lines"].append(line)
             continue
 
         if RESPONSES_START_TEX.match(stripped):
