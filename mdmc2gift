@@ -25,9 +25,18 @@ UNICODE_SPACES = {
     "\u202F": " ",
 }
 
+UNICODE_PUNCTUATION = {
+    "\u2018": "'",
+    "\u2019": "'",
+}
+
+NONE_OF_THE_ABOVE = "Aucune de ces réponses n'est correcte."
+
 
 def normalize_spaces(text: str) -> str:
     for source, replacement in UNICODE_SPACES.items():
+        text = text.replace(source, replacement)
+    for source, replacement in UNICODE_PUNCTUATION.items():
         text = text.replace(source, replacement)
     return text
 
@@ -78,6 +87,14 @@ def finalize_question(current: dict[str, object] | None) -> str | None:
     if current["current_answer"] is not None:
         answers.append(current["current_answer"])
         current["current_answer"] = None
+
+    if len(answers) == 4:
+        answers.append(
+            {
+                "correct": False,
+                "lines": [NONE_OF_THE_ABOVE],
+            }
+        )
 
     if not answers:
         return None
@@ -187,7 +204,7 @@ def convert_lines(lines: list[str]) -> str:
         if section == "answers":
             if current["answers"]:
                 current["answers"][-1]["lines"].append(stripped)
-            continue
+                continue
 
         if section == "question":
             if question_match := QUESTION_TEXT_MD.match(stripped):
@@ -207,7 +224,6 @@ def read_input(path: Path | None) -> list[str]:
     if path is None:
         return sys.stdin.read().splitlines(True)
     return path.read_text(encoding="utf-8").splitlines(True)
-
 
 def write_output(path: Path | None, content: str) -> None:
     if path is None:
